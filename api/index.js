@@ -41,7 +41,7 @@ app.post('/register', async (req, res) => {
 });
 
 
-app.post('/api/login', async (req, res) => {
+app.post('/login', async (req, res) => {
     mongoose.connect(process.env.MONGO_URL);
     const { email, password } = req.body;
     const userDoc = await User.findOne({ email });
@@ -50,7 +50,8 @@ app.post('/api/login', async (req, res) => {
         if (passOk) {
             jwt.sign({
                 email: userDoc.email,
-                id: userDoc._id
+                id: userDoc._id,
+                name: userDoc.name
             }, jwtSecret, {}, (err, token) => {
                 if (err) throw err;
                 res.cookie('token', token).json(userDoc);
@@ -62,4 +63,20 @@ app.post('/api/login', async (req, res) => {
         res.json('not found');
     }
 });
+
+app.get('/profile', (req, res) => {
+    mongoose.connect(process.env.MONGO_URL);
+    const { token } = req.cookies;
+    if (token) {
+        jwt.verify(token, jwtSecret, {}, async (err, data) => {
+            if (err) throw err;
+            const { name, email, _id } = await User.findById(data.id);
+            res.json({ name, email, _id });
+        });
+    } else {
+        res.json(null);
+    }
+});
+
+
 app.listen(4000);
