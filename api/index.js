@@ -26,6 +26,7 @@ app.get('/test', (req, res) => {
     res.json("test ok")
 })
 
+// endpoint to register
 app.post('/register', async (req, res) => {
     const { name, email, password } = req.body;
     try {
@@ -40,18 +41,18 @@ app.post('/register', async (req, res) => {
     }
 });
 
-
+// endpoint to login 
 app.post('/login', async (req, res) => {
     mongoose.connect(process.env.MONGO_URL);
     const { email, password } = req.body;
     const userDoc = await User.findOne({ email });
+    console.log(userDoc)
     if (userDoc) {
         const passOk = bcrypt.compareSync(password, userDoc.password);
         if (passOk) {
             jwt.sign({
                 email: userDoc.email,
-                id: userDoc._id,
-                name: userDoc.name
+                id: userDoc._id
             }, jwtSecret, {}, (err, token) => {
                 if (err) throw err;
                 res.cookie('token', token).json(userDoc);
@@ -60,17 +61,23 @@ app.post('/login', async (req, res) => {
             res.status(422).json('pass not ok');
         }
     } else {
-        res.json('not found');
+        res.status(404).json('user not found'); // Send 404 status code when user is not found
     }
 });
 
+// endpoint to logout user 
+app.post('/logout', (req, res) => {
+    res.cookie('token', '').json(true)
+});
+
+// endpoint to track cookie and set users constantly 
 app.get('/profile', (req, res) => {
     mongoose.connect(process.env.MONGO_URL);
     const { token } = req.cookies;
     if (token) {
-        jwt.verify(token, jwtSecret, {}, async (err, data) => {
+        jwt.verify(token, jwtSecret, {}, async (err, userData) => {
             if (err) throw err;
-            const { name, email, _id } = await User.findById(data.id);
+            const { name, email, _id } = await User.findById(userData.id);
             res.json({ name, email, _id });
         });
     } else {
