@@ -1,38 +1,42 @@
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const User = require('./models/User.js');
+const Place = require('./models/Place.js');
 const cookieParser = require('cookie-parser');
 const imageDownloader = require('image-downloader');
+
 const multer = require('multer');
 const fs = require('fs');
+const mime = require('mime-types');
 
-const User = require('./models/User.js');
-require('dotenv').config()
+require('dotenv').config();
 const app = express();
-// shTGMBwXwZAm4QTp
+
 const bcryptSalt = bcrypt.genSaltSync(10);
-const jwtSecret = 'randomstringfornow'
+const jwtSecret = 'fasefraw4r5r3wq45wdfgw34twdfg';
+const bucket = 'dawid-booking-app';
 
 app.use(express.json());
 app.use(cookieParser());
 app.use('/uploads', express.static(__dirname + '/uploads'));
-
 app.use(cors({
     credentials: true,
     origin: 'http://127.0.0.1:5173',
-}))
+}));
 
-mongoose.connect(process.env.MONGO_URL);
 
 app.get('/test', (req, res) => {
-    res.json("test ok")
-})
+    mongoose.connect(process.env.MONGO_URL);
+    res.json('test ok');
+});
 
-// endpoint to register
 app.post('/register', async (req, res) => {
+    mongoose.connect(process.env.MONGO_URL);
     const { name, email, password } = req.body;
+
     try {
         const userDoc = await User.create({
             name,
@@ -40,17 +44,16 @@ app.post('/register', async (req, res) => {
             password: bcrypt.hashSync(password, bcryptSalt),
         });
         res.json(userDoc);
-    } catch (error) {
-        res.status(422).json(error);
+    } catch (e) {
+        res.status(422).json(e);
     }
+
 });
 
-// endpoint to login 
 app.post('/login', async (req, res) => {
     mongoose.connect(process.env.MONGO_URL);
     const { email, password } = req.body;
     const userDoc = await User.findOne({ email });
-    console.log(userDoc)
     if (userDoc) {
         const passOk = bcrypt.compareSync(password, userDoc.password);
         if (passOk) {
@@ -65,16 +68,10 @@ app.post('/login', async (req, res) => {
             res.status(422).json('pass not ok');
         }
     } else {
-        res.status(404).json('user not found'); // Send 404 status code when user is not found
+        res.json('not found');
     }
 });
 
-// endpoint to logout user 
-app.post('/logout', (req, res) => {
-    res.cookie('token', '').json(true)
-});
-
-// endpoint to track cookie and set users constantly 
 app.get('/profile', (req, res) => {
     mongoose.connect(process.env.MONGO_URL);
     const { token } = req.cookies;
@@ -88,6 +85,11 @@ app.get('/profile', (req, res) => {
         res.json(null);
     }
 });
+
+app.post('/logout', (req, res) => {
+    res.cookie('token', '').json(true);
+});
+
 
 app.post('/upload-by-link', async (req, res) => {
     const { link } = req.body;
@@ -117,21 +119,71 @@ app.post('/upload', photosMiddleware.array('photos', 100), (req, res) => {
     res.json(uploadedFiles);
 })
 
-app.post('/places', (req, res) => {
-    mongoose.connect(process.env.MONGO_URL);
-    const { token } = req.cookies;
-    const {
-        title, address, addedPhotos, description, price,
-        perks, extraInfo, checkIn, checkOut, maxGuests,
-    } = req.body;
-    jwt.verify(token, jwtSecret, {}, async (err, userData) => {
-        if (err) throw err;
-        const placeDoc = await Place.create({
-            owner: userData.id, price,
-            title, address, photos: addedPhotos, description,
+app.post('/places', async (req, res) => {
+    try {
+        const { token } = req.cookies;
+        const {
+            title, address, addedPhotos, description, price,
             perks, extraInfo, checkIn, checkOut, maxGuests,
+        } = req.body;
+
+        if (!token) {
+            return res.status(401).json({ error: 'JWT token must be provided' });
+        }
+
+        jwt.verify(token, jwtSecret, {}, async (err, userData) => {
+            if (err) {
+                return res.status(401).json({ error: 'Invalid JWT token' });
+            }
+
+            const placeDoc = await Place.create({
+                owner: userData.id, price,
+                title, address, photos: addedPhotos, description,
+                perks, extraInfo, checkIn, checkOut, maxGuests,
+            });
+
+            res.json(placeDoc);
         });
-        res.json(placeDoc);
-    });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'An internal server error occurred' });
+    }
 });
+
+// app.get('/api/user-places', (req, res) => {
+//     mongoose.connect(process.env.MONGO_URL);
+//     const { token } = req.cookies;
+//     jwt.verify(token, jwtSecret, {}, async (err, userData) => {
+//         const { id } = userData;
+//         res.json(await Place.find({ owner: id }));
+//     });
+// });
+
+
+// app.put('/places', async (req, res) => {
+//     mongoose.connect(process.env.MONGO_URL);
+//     const { token } = req.cookies;
+//     const {
+//         id, title, address, addedPhotos, description,
+//         perks, extraInfo, checkIn, checkOut, maxGuests, price,
+//     } = req.body;
+//     jwt.verify(token, jwtSecret, {}, async (err, userData) => {
+//         if (err) throw err;
+//         const placeDoc = await Place.findById(id);
+//         if (userData.id === placeDoc.owner.toString()) {
+//             placeDoc.set({
+//                 title, address, photos: addedPhotos, description,
+//                 perks, extraInfo, checkIn, checkOut, maxGuests, price,
+//             });
+//             await placeDoc.save();
+//             res.json('ok');
+//         }
+//     });
+// });
+
+app.get('/places', async (req, res) => {
+    mongoose.connect(process.env.MONGO_URL);
+    res.json(await Place.find());
+});
+
 app.listen(4000);
